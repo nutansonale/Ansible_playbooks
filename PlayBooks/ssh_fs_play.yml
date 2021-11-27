@@ -1,0 +1,70 @@
+- hosts: servers
+  become: true
+  become_user: root
+  vars:
+   master_ip: hostvars['master']['ansible_host']
+   users: nutan
+  
+  tasks:
+    - name: general update
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+
+    - name: creating directory to share
+      file: 
+        path: /Sharing
+        state: directory
+        mode: 0777
+    
+- hosts: agents
+  become: true
+  become_user: root
+  vars:
+   master_ip: hostvars['master']['ansible_host']
+   
+
+  tasks:
+    - name: general update
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+
+    - name: creating directory to share
+      file: 
+        path: Sharing_mirror4
+        state: directory
+        mode: 0777
+
+    - name: installing sshfs
+      apt:
+       name: sshfs
+       state: latest
+
+    - name: Transporting auth files
+      template:
+        src: Linux_docker.pem
+        dest: /etc/
+        mode: 0400
+
+    - name: mounting file system
+      shell: /usr/bin/sshfs -o idmap=user,reconnect ubuntu@{{hostvars['master']['ansible_host']}}:/Sharing Sharing_mirror4 -o IdentityFile=/etc/Linux_docker.pem -o cache=no -o StrictHostKeyChecking=no
+      register: hello
+
+
+    - debug: msg="{{ hello.stdout }}"
+
+    - debug: msg="{{ hello.stderr }}" 
+
+
+    - name: loading userdata
+      include_vars:
+        file: users.yml
+        name: user_data
+      
+    - name: creating users "{{ item }}"
+      user: 
+        name: "{{ item }}"
+        create_home: yes
+        password: "{{ 'password' | password_hash('sha512') }}"
+        update_password: always
+      loop: "{{ user_data['users'] }}"
+      
+
+
